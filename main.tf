@@ -1,6 +1,6 @@
 data "aws_region" "current" {}
 data "aws_availability_zones" "current" {
-    state = "available"
+  state = "available"
 }
 
 provider "aws" {
@@ -9,7 +9,7 @@ provider "aws" {
 
 locals {
   vpc_cidr_block = "10.0.0.0/22"
-  azs = data.aws_availability_zones.current.names
+  azs            = data.aws_availability_zones.current.names
 }
 
 resource "aws_vpc" "main-learn-vpcs" {
@@ -33,7 +33,7 @@ resource "aws_vpc" "main-learn-vpcs" {
 #   }
 # }
 
-# hence as usual I'm going for the more advanced example
+# hence as usual I'm going for the more advanced setup
 resource "aws_subnet" "public-learn-vpcs" {
   count = length(local.azs)
 
@@ -49,3 +49,35 @@ resource "aws_subnet" "public-learn-vpcs" {
     Name = "public-${substr(local.azs[count.index], -1, 1)}-learn-vpcs"
   }
 }
+
+# only one route table needed as the subnets are multiple for the availability
+resource "aws_route_table" "public-learn-vpcs" {
+  vpc_id = aws_vpc.main-learn-vpcs.id
+
+  route = []
+
+  tags = {
+    Name = "public-learn-vpcs"
+  }
+}
+
+resource "aws_route_table_association" "pub" {
+  count = length(local.azs)
+
+  subnet_id      = aws_subnet.public-learn-vpcs[count.index].id
+  route_table_id = aws_route_table.public-learn-vpcs.id
+}
+
+# private subnets
+# resource "aws_subnet" "private-learn-vpcs" {
+#   count = length(local.azs)
+
+#   vpc_id = aws_vpc.main-learn-vpcs.id
+#   # 1 corresponds to /23 - see above
+#   cidr_block        = cidrsubnet(local.vpc_cidr_block, 1, count.index)
+#   availability_zone = local.azs[count.index]
+
+#   tags = {
+#     Name = "private-${substr(local.azs[count.index], -1, 1)}-learn-vpcs"
+#   }
+# }
