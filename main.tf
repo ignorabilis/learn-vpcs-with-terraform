@@ -113,3 +113,18 @@ resource "aws_route_table_association" "priv" {
   subnet_id      = aws_subnet.private-learn-vpcs[count.index].id
   route_table_id = aws_route_table.private-learn-vpcs.id
 }
+
+resource "aws_internet_gateway" "igw-learn-vpcs" {
+  # prefer using the aws_internet_gateway_attachment resource
+  #vpc_id = aws_vpc.main-learn-vpcs.id
+
+  tags = {
+    Name = "igw-learn-vpcs"
+  }
+}
+
+# should be clearer and more maintainable compared to giving the vpc id directly
+resource "aws_internet_gateway_attachment" "igw-learn-vpcs" {
+  internet_gateway_id = aws_internet_gateway.igw-learn-vpcs.id
+  vpc_id              = aws_vpc.main-learn-vpcs.id
+}
