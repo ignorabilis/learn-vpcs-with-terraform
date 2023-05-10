@@ -132,3 +132,25 @@ resource "aws_internet_gateway_attachment" "igw-learn-vpcs" {
   internet_gateway_id = aws_internet_gateway.igw-learn-vpcs.id
   vpc_id              = aws_vpc.main-learn-vpcs.id
 }
+
+resource "aws_eip" "nat_gw_ip" {
+  for_each = { for idx, name in aws_subnet.public-learn-vpcs : idx => name }
+
+  # EC2 classic stuff - don't care right now, if I encounter it will research
+  vpc = true
+  
+  tags = {
+    Name = "eip-${substr(each.value.availability_zone, -1, 1)}-learn-vpcs"
+  }
+}
+
+resource "aws_nat_gateway" "nat-gw" {
+  for_each = { for idx, name in aws_subnet.public-learn-vpcs : idx => name }
+
+  subnet_id = each.value.id
+  allocation_id = aws_eip.nat_gw_ip[each.key].id
+  
+  tags = {
+    Name = "nat-gw-${substr(each.value.availability_zone, -1, 1)}-learn-vpcs"
+  }
+}
