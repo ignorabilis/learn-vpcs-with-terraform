@@ -101,10 +101,28 @@ resource "aws_subnet" "private-learn-vpcs" {
   }
 }
 
+      # because cidr blocks have to be unique in a route table I need to pick up
+      # each subnet and using the subnet_id associated with each nat gateway 
+      # to find the subnet cidr
+      # OK, this is not true - the traffic is actually egress so the cidr_block
+      # should probably be different; and then the subnet_id of a nat gw is the
+      # one in which the nat gw is placed, not associated with
+      # keeping the whole thing just for reference 
+      #cidr_block = { for idx, name in aws_subnet.private-learn-vpcs : name.id => name }[route.value.subnet_id].cidr_block
+
 resource "aws_route_table" "private-learn-vpcs" {
   vpc_id = aws_vpc.main-learn-vpcs.id
 
-  route = []
+  dynamic "route" {
+    for_each = toset(values(aws_nat_gateway.nat-gw))
+    content {
+      # TODO - figure this out, you cannot have 4 routes with the same cidr_block
+      cidr_block = "???"
+      # remember - `each` cannot be used because that would clash
+      # with a resource `each`; so the name of the dynamic block is used instead
+      nat_gateway_id = route.value.id
+    }
+  }
 
   tags = {
     Name = "private-learn-vpcs"
@@ -112,7 +130,7 @@ resource "aws_route_table" "private-learn-vpcs" {
 }
 
 resource "aws_route_table_association" "priv" {
-  count = local.public_subnets_count
+  count = local.private_subnets_count
 
   subnet_id      = aws_subnet.private-learn-vpcs[count.index].id
   route_table_id = aws_route_table.private-learn-vpcs.id
@@ -138,7 +156,7 @@ resource "aws_eip" "nat_gw_ip" {
 
   # EC2 classic stuff - don't care right now, if I encounter it will research
   vpc = true
-  
+
   tags = {
     Name = "eip-${substr(each.value.availability_zone, -1, 1)}-learn-vpcs"
   }
@@ -147,9 +165,9 @@ resource "aws_eip" "nat_gw_ip" {
 resource "aws_nat_gateway" "nat-gw" {
   for_each = { for idx, name in aws_subnet.public-learn-vpcs : idx => name }
 
-  subnet_id = each.value.id
+  subnet_id     = each.value.id
   allocation_id = aws_eip.nat_gw_ip[each.key].id
-  
+
   tags = {
     Name = "nat-gw-${substr(each.value.availability_zone, -1, 1)}-learn-vpcs"
   }
