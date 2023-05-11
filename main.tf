@@ -101,39 +101,53 @@ resource "aws_subnet" "private-learn-vpcs" {
   }
 }
 
-      # because cidr blocks have to be unique in a route table I need to pick up
-      # each subnet and using the subnet_id associated with each nat gateway 
-      # to find the subnet cidr
-      # OK, this is not true - the traffic is actually egress so the cidr_block
-      # should probably be different; and then the subnet_id of a nat gw is the
-      # one in which the nat gw is placed, not associated with
-      # keeping the whole thing just for reference 
-      #cidr_block = { for idx, name in aws_subnet.private-learn-vpcs : name.id => name }[route.value.subnet_id].cidr_block
+# because cidr blocks have to be unique in a route table I need to pick up
+# each subnet and using the subnet_id associated with each nat gateway 
+# to find the subnet cidr
+# OK, this is not true - the traffic is actually egress so the cidr_block
+# should probably be different; and then the subnet_id of a nat gw is the
+# one in which the nat gw is placed (so the public one), not the one 
+# associated with (so the private)
+# keeping the whole thing just for reference 
+#
+# dynamic "route" {
+#   for_each = toset(values(aws_nat_gateway.nat-gw))
+#   content {
+#     cidr_block = { for idx, name in aws_subnet.private-learn-vpcs : name.id => name }[route.value.subnet_id].cidr_block
+#     # remember - `each` cannot be used because that would clash
+#     # with a resource `each`; so the name of the dynamic block is used instead
+#     nat_gateway_id = route.value.id
+#   }
+# }
 
 resource "aws_route_table" "private-learn-vpcs" {
+  # the only way I found is by creating a route table per nat-gw
+  # confirmed by chatgpt4...
+  # searched aws' docs but could not confirm
+  # currently there's a nat in each public subnet, but we only care about nats;
+  # if the are more public subnets for some reason we should not care
+  count = length(aws_nat_gateway.nat-gw)
+
   vpc_id = aws_vpc.main-learn-vpcs.id
 
-  dynamic "route" {
-    for_each = toset(values(aws_nat_gateway.nat-gw))
-    content {
-      # TODO - figure this out, you cannot have 4 routes with the same cidr_block
-      cidr_block = "???"
-      # remember - `each` cannot be used because that would clash
-      # with a resource `each`; so the name of the dynamic block is used instead
-      nat_gateway_id = route.value.id
-    }
+  route {
+    cidr_block     = "0.0.0.0/0"
+    nat_gateway_id = aws_nat_gateway.nat-gw[count.index].id
   }
 
   tags = {
-    Name = "private-learn-vpcs"
+    Name = "private-${substr(local.azs[count.index], -1, 1)}-learn-vpcs"
   }
 }
 
 resource "aws_route_table_association" "priv" {
-  count = local.private_subnets_count
+  # here we're concerned with the private subnets instead; if there are more
+  # private subnets for some reason we should just associate those with the
+  # existing route tables
+  count = local.public_subnets_count
 
   subnet_id      = aws_subnet.private-learn-vpcs[count.index].id
-  route_table_id = aws_route_table.private-learn-vpcs.id
+  route_table_id = aws_route_table.private-learn-vpcs[count.index % length(aws_nat_gateway.nat-gw)].id
 }
 
 resource "aws_internet_gateway" "igw-learn-vpcs" {
