@@ -23,6 +23,7 @@ locals {
 
 resource "aws_vpc" "main-learn-vpcs" {
   cidr_block = local.vpc_cidr_block
+  enable_dns_hostnames = true
 
   tags = {
     Name    = "main-learn-vpcs"
